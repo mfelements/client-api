@@ -21,13 +21,48 @@ function shuffleArray(array){
 	return newarr
 }
 
+function getKeyByVal(obj, val){
+	for(const i in obj) if(obj[i] === val) return i
+}
+
+async function rateNodes(){
+	const startTime = Date.now();
+	let res = [];
+	const blockCounter = {};
+	for(const node of shuffleArray(nodes)) res.push(Promise.all([ node, node, node ].map(node => sendRequestWithNode(node, rand(2), 'getinfo', requestTimeout).then(r => {
+		if(!r || !r.result || !r.result.blocks) return null;
+		const { blocks } = r.result;
+		if(!blockCounter[blocks]) blockCounter[blocks] = 1;
+		else blockCounter[blocks]++;
+		r.requestTime = Date.now() - startTime;
+		r.node = node;
+		return r
+	}))).then(v => v.reduce((p, c) => {
+		p.requestTime += c.requestTime;
+		return p
+	})));
+	res = (await Promise.all(res)).filter(v => v);
+	const blockCountConsensusCount = Math.max(...Object.values(blockCounter));
+	const blockCountConsensus = +getKeyByVal(blockCounter, blockCountConsensusCount);
+	res = res.filter(r => (r.result.blocks === blockCountConsensus));
+	res = res.sort((a, b) => (a.requestTime - b.requestTime));
+	return res.map(v => v.node)
+}
+
+const _ratedNodes = rateNodes();
+
 async function sendRequest(id, method, timeout, params = [], attempt = 0, nodeArray = shuffleArray(nodes)){
 	const controller = new AbortController;
 	const { signal } = controller;
 	let pointer;
 	if(timeout !== null) pointer = setTimeout(() => controller.abort(), timeout);
+	const currentNode = nodeArray.pop();
 	try{
-		return await fetch(nodeArray.pop(), {
+		if(!currentNode){
+			attempt = attemptCount - 1;
+			throw new Error
+		}
+		return await fetch(currentNode, {
 			method: 'POST',
 			body: JSON.stringify({
 				jsonrpc: '2.0',
@@ -46,12 +81,20 @@ async function sendRequest(id, method, timeout, params = [], attempt = 0, nodeAr
 	}
 }
 
+async function sendRequestWithNode(node, id, method, timeout, params = []){
+	try{
+		return sendRequest(id, method, timeout, params, 2, [ node ])
+	} catch(e){
+		return null
+	}
+}
+
 const blockchainAPI = new Proxy(Object.create(null), {
 	get(_, method){
 		if(!_[method]) Object.assign(_, {
 			[method]: logged(() => withName(method, async (...params) => {
 				const id = rand(12);
-				const data = await sendRequest(id, method, requestTimeout, params);
+				const data = await sendRequest(id, method, requestTimeout, params, 0, await _ratedNodes);
 				if(data.error) throw new BlockchainError(data.error);
 				if(data.id !== id) throw withName('SystemError', new Error('returned info does not match requested one'));
 				return data.result
