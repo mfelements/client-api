@@ -2,10 +2,15 @@ import rand from 'rand'
 import { node as nodes } from './servers.js'
 import logged, { withName } from 'logger'
 
-const nodeRefreshInterval = 10000,
-	requestTimeout = 2000;
+const requestTimeout = 2000,
+	attemptCount = 3;
 
-let currentNode = shuffleArray(nodes)[0];
+class BlockchainError extends Error{
+	constructor(error){
+		super(`${error.code}\n${error.message}`);
+		this.name = 'BlockchainError'
+	}
+}
 
 function shuffleArray(array){
 	const newarr = Array.from(array);
@@ -16,42 +21,13 @@ function shuffleArray(array){
 	return newarr
 }
 
-function getKeyByVal(obj, val){
-	for(const i in obj) if(obj[i] === val) return i
-}
-
-async function selectNode(){
-	const startTime = Date.now();
-	let res = [];
-	const blockCounter = {};
-	for(const node of shuffleArray(nodes)) res.push(sendRequest(node, rand(2), 'getinfo', requestTimeout).then(r => {
-		if(!r || !r.result || !r.result.blocks) return null;
-		const { blocks } = r.result;
-		if(!blockCounter[blocks]) blockCounter[blocks] = 1;
-		else blockCounter[blocks]++;
-		r.requestTime = Date.now() - startTime;
-		r.node = node;
-		return r
-	}));
-	res = (await Promise.all(res)).filter(v => v);
-	const blockCountConsensusCount = Math.max(...Object.values(blockCounter));
-	const blockCountConsensus = +getKeyByVal(blockCounter, blockCountConsensusCount);
-	res = res.filter(r => (r.result.blocks === blockCountConsensus));
-	res = res.sort((a, b) => (a.requestTime - b.requestTime));
-	return res[0].node
-}
-
-async function refreshCurrentNode(){
-	try{ currentNode = await selectNode() } catch(e){}
-}
-
-async function sendRequest(node, id, method, timeout, params = []){
+async function sendRequest(id, method, timeout, params = [], attempt = 0, nodeArray = shuffleArray(nodes)){
 	const controller = new AbortController;
 	const { signal } = controller;
 	let pointer;
 	if(timeout !== null) pointer = setTimeout(() => controller.abort(), timeout);
 	try{
-		return await fetch(node, {
+		return await fetch(nodeArray.pop(), {
 			method: 'POST',
 			body: JSON.stringify({
 				jsonrpc: '2.0',
@@ -65,15 +41,8 @@ async function sendRequest(node, id, method, timeout, params = []){
 			return r.json()
 		})
 	} catch(e){
-		return null
-	}
-}
-
-refreshCurrentNode() && setInterval(refreshCurrentNode, nodeRefreshInterval);
-
-class BlockchainError extends Error{
-	constructor(error){
-		super(`${error.code}\n${error.message}`)
+		if(++attempt === attemptCount) throw withName('NetworkError', new Error(`cannot connect to any node after ${attemptCount} attempts`));
+		return sendRequest(id, method, timeout, params, attempt, nodeArray)
 	}
 }
 
@@ -82,11 +51,7 @@ const blockchainAPI = new Proxy(Object.create(null), {
 		if(!_[method]) Object.assign(_, {
 			[method]: logged(() => withName(method, async (...params) => {
 				const id = rand(12);
-				const data = await sendRequest(currentNode, id, method, requestTimeout, params);
-				if(!data){
-					await refreshCurrentNode();
-					return _[method](...params)
-				}
+				const data = await sendRequest(id, method, requestTimeout, params);
 				if(data.error) throw new BlockchainError(data.error);
 				if(data.id !== id) throw withName('SystemError', new Error('returned info does not match requested one'));
 				return data.result
@@ -99,13 +64,6 @@ const blockchainAPI = new Proxy(Object.create(null), {
 const isBin = /[\x00-\x08\x0E-\x1F]/;
 
 function parseNVSValue(value){
-	if(/^[^=]*$/.test(value)){
-		try{
-			return JSON.parse(value)
-		} catch(e){
-			return value
-		}
-	}
 	const res = {};
 	const lines = value.split('\n');
 	let line;
