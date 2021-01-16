@@ -1,5 +1,5 @@
 import rand from 'rand'
-import { node as nodes } from './servers.js'
+import { nodes } from './servers.js'
 import logged, { withName } from 'logger'
 
 const requestTimeout = 2000,
