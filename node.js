@@ -1,6 +1,6 @@
-import rand from 'rand'
+import rand from '@mfelements/rand'
 import { nodes } from './servers.js'
-import logged, { withName } from 'logger'
+import logged, { withName } from '@mfelements/logger'
 
 const requestTimeout = 2000,
 	attemptCount = 3;
