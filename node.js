@@ -107,15 +107,11 @@ const blockchainAPI = new Proxy(Object.create(null), {
 const isBin = /[\x00-\x08\x0E-\x1F]/;
 
 function parseNVSValue(value){
+	if(isBin.test(value)) return new Uint8Array([...value].map(v => v.charCodeAt(0)));
 	const res = {};
 	const lines = value.split('\n');
 	let line;
 	while(line = lines.shift()){
-		if(isBin.test(line)){
-			const splitted = line.split('=');
-			res[splitted.shift()] = splitted.join('=') + lines.join('\n');
-			return res
-		}
 		if(line){
 			const splitted = line.split('=');
 			res[splitted.shift()] = splitted.join('=')
