@@ -94,7 +94,7 @@ const blockchainAPI = new Proxy(Object.create(null), {
 		if(!_[method]) Object.assign(_, {
 			[method]: logged(() => withName(method, async (...params) => {
 				const id = rand(12);
-				const data = await sendRequest(id, method, requestTimeout, params, 0, await _ratedNodes);
+				const data = await sendRequest(id, method, requestTimeout, params, 0, [...await _ratedNodes]);
 				if(data.error) throw new BlockchainError(data.error);
 				if(data.id !== id) throw withName('SystemError', new Error('returned info does not match requested one'));
 				return data.result
