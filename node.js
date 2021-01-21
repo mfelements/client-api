@@ -124,7 +124,7 @@ export async function getNames(prefix){
 	if(!prefix) throw new Error('There is no prefix specified');
 	const names = await blockchainAPI.name_filter('^' + prefix + ':');
 	const res = {};
-	for(const { name, value } of names.filter(({ name }) => name.startsWith(prefix))){
+	for(const { name, value } of names){
 		res[name.slice(prefix.length)] = parseNVSValue(value)
 	}
 	return res
