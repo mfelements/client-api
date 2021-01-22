@@ -92,7 +92,7 @@ async function sendRequestWithNode(node, id, method, timeout, params = []){
 const blockchainAPI = new Proxy(Object.create(null), {
 	get(_, method){
 		if(!_[method]) Object.assign(_, {
-			[method]: logged(() => withName(method, async (...params) => {
+			[method]: logged(() => withName('RPC.' + method, async (...params) => {
 				const id = rand(12);
 				const data = await sendRequest(id, method, requestTimeout, params, 0, [...await _ratedNodes]);
 				if(data.error) throw new BlockchainError(data.error);
