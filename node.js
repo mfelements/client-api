@@ -125,7 +125,7 @@ export async function getNames(prefix){
 	const names = await blockchainAPI.name_filter('^' + prefix + ':');
 	const res = {};
 	for(const { name, value } of names){
-		res[name.slice(prefix.length)] = parseNVSValue(value)
+		res[name.slice(prefix.length + 1)] = parseNVSValue(value)
 	}
 	return res
 }
